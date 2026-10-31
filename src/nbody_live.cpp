@@ -13,7 +13,8 @@
 using namespace std;
 
 // Simulation parameters
-const int N = 500;
+//const int N = 500;
+int N = 500;
 const int ITERATIONS = 500;
 
 const double G = 1.0;
@@ -163,7 +164,23 @@ void save_results(const vector<Particle>& particles) {
 
 // Main function
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc > 1) {
+        try {
+            N = stoi(argv[1]);
+
+            if (N < 10 || N > 5000) {
+                cerr << "Particle count must be between 10 and 5000.\n";
+                return 1;
+            }
+
+        } catch (...) {
+            cerr << "Invalid particle count.\n";
+            return 1;
+        }
+    }
+
+    cerr << "Particle count: " << N << "\n";
 
     vector<Particle> particles(N);
 

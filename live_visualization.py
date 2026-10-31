@@ -1,4 +1,3 @@
-
 import os
 import sys
 import time
@@ -15,7 +14,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QPushButton,
-    QLabel
+    QLabel,
+    QSpinBox
 )
 
 from PyQt6.QtCore import QTimer
@@ -38,51 +38,59 @@ app.use_app("pyqt6")
 
 # ---------------- START C++ PROCESS ----------------
 
+# ---------------- C++ PROCESS MANAGEMENT ----------------
+
+N = 500
+frame_queue = queue.Queue(maxsize=2)
+
+process = None
+reader_thread = None
+
 env = os.environ.copy()
-env["OMP_NUM_THREADS"] = "4"
+env["OMP_NUM_THREADS"] = "8"
 env["PATH"] = r"C:\msys64\ucrt64\bin;" + env["PATH"]
 
-process = subprocess.Popen(
-    [EXECUTABLE],
-    cwd=PROJECT_DIR,
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    stderr=None,
-    text=True,
-    bufsize=1,
-    env=env
-)
 
+def launch_simulation(particle_count):
 
-# ---------------- COMMAND HANDLER ----------------
+    global process, reader_thread, N
 
-def send_command(command):
+    N = particle_count
 
-    if process.poll() is None:
+    process = subprocess.Popen(
+        [EXECUTABLE, str(N)],
+        cwd=PROJECT_DIR,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=None,
+        text=True,
+        bufsize=1,
+        env=env
+    )
 
-        try:
-            process.stdin.write(command + "\n")
-            process.stdin.flush()
+    reader_thread = threading.Thread(
+        target=read_cpp_output,
+        args=(process, N),
+        daemon=True
+    )
+    reader_thread.start()
 
-            print("Command:", command)
-
-        except (BrokenPipeError, OSError):
-            print("C++ process is not accepting commands.")
+    print(f"Started simulation with {N} particles")
 
 
 # ---------------- READ C++ FRAMES ----------------
 
-def read_cpp_output():
+def read_cpp_output(current_process, particle_count):
 
     positions = []
 
-    for line in process.stdout:
+    for line in current_process.stdout:
 
         line = line.strip()
 
         if line == "END_FRAME":
 
-            if len(positions) == N:
+            if len(positions) == particle_count:
 
                 frame = np.array(
                     positions,
@@ -90,7 +98,6 @@ def read_cpp_output():
                 )
 
                 if frame_queue.full():
-
                     try:
                         frame_queue.get_nowait()
                     except queue.Empty:
@@ -114,13 +121,41 @@ def read_cpp_output():
                 continue
 
 
-reader_thread = threading.Thread(
-    target=read_cpp_output,
-    daemon=True
-)
 
-reader_thread.start()
 
+# ---------------- COMMAND HANDLER ----------------
+
+def send_command(command):
+
+    if process is not None and process.poll() is None:
+
+        try:
+            process.stdin.write(command + "\n")
+            process.stdin.flush()
+
+        except (BrokenPipeError, OSError):
+            print("Could not send command")
+
+def stop_current_process():
+
+    global process
+
+    if process is not None and process.poll() is None:
+
+        send_command("STOP")
+
+        try:
+            process.wait(timeout=3)
+
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            process.wait()
+
+    process = None
+
+
+# Launch initial simulation
+launch_simulation(N)
 
 # ---------------- CREATE VISPY CANVAS ----------------
 
@@ -177,6 +212,18 @@ button_layout.addWidget(stop_button)
 
 main_layout.addLayout(button_layout)
 
+# Particle count selector
+
+particle_selector = QSpinBox()
+particle_selector.setRange(10, 5000)
+particle_selector.setSingleStep(100)
+particle_selector.setValue(500)
+
+apply_button = QPushButton("Apply Particle Count")
+
+button_layout.addWidget(QLabel("Particles:"))
+button_layout.addWidget(particle_selector)
+button_layout.addWidget(apply_button)
 
 # ---------------- STATUS DISPLAY ----------------
 
@@ -226,7 +273,31 @@ pause_button.clicked.connect(pause_simulation)
 reset_button.clicked.connect(reset_simulation)
 stop_button.clicked.connect(stop_simulation)
 
+def apply_particle_count():
 
+    selected_count = particle_selector.value()
+
+    # Stop old simulation
+    stop_current_process()
+
+    # Remove old frames
+    while not frame_queue.empty():
+        try:
+            frame_queue.get_nowait()
+        except queue.Empty:
+            break
+
+    # Start new simulation
+    launch_simulation(selected_count)
+
+    particle_label.setText(
+        f"Particles: {selected_count}"
+    )
+
+    status_label.setText("Status: Paused")
+
+
+apply_button.clicked.connect(apply_particle_count)
 # ---------------- FPS AND RENDERING ----------------
 
 displayed_frames = 0
@@ -287,18 +358,7 @@ window.show()
 # ---------------- CLEANUP ----------------
 
 def cleanup():
-
-    if process.poll() is None:
-
-        send_command("STOP")
-
-        try:
-            process.wait(timeout=3)
-
-        except subprocess.TimeoutExpired:
-            process.terminate()
-
-
+    stop_current_process()
 qt_app.aboutToQuit.connect(cleanup)
 
 
