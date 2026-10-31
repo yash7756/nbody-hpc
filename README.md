@@ -65,40 +65,74 @@ nbody-hpc/
 
 ## Mathematical Model
 
-The gravitational acceleration acting on particle \(i\) is calculated as:
+### 1. Gravitational Acceleration
 
-\[
+The gravitational acceleration acting on particle \(i\) due to all other particles is calculated using Newton's law of universal gravitation with gravitational softening:
+
+$$
 \vec{a}_i =
-G \sum_{j \ne i}
+G \sum_{\substack{j=1 \\ j \neq i}}^{N}
 m_j
 \frac{\vec{r}_j-\vec{r}_i}
-{(|\vec{r}_j-\vec{r}_i|^2+\epsilon^2)^{3/2}}
-\]
+{\left(
+\left|\vec{r}_j-\vec{r}_i\right|^2+\epsilon^2
+\right)^{3/2}}
+$$
 
 Where:
 
 - \(G\) is the gravitational constant.
 - \(m_j\) is the mass of particle \(j\).
-- \(\vec{r}_i\) and \(\vec{r}_j\) are particle positions.
-- \(\epsilon\) is the softening parameter, used to avoid singularities at very small distances.
+- \(\vec{r}_i\) and \(\vec{r}_j\) are the position vectors of particles \(i\) and \(j\).
+- \(\epsilon\) is the gravitational softening parameter, used to avoid singularities at very small distances.
+- \(N\) is the total number of particles.
 
-The simulation uses **Symplectic Euler integration**:
+### 2. Symplectic Euler Integration
 
-\[
-\vec{v}_i^{n+1}=\vec{v}_i^n+\vec{a}_i^n\Delta t
-\]
+The simulation uses the **Symplectic Euler integration method** to update particle velocities and positions at each timestep.
 
-\[
-\vec{r}_i^{n+1}=\vec{r}_i^n+\vec{v}_i^{n+1}\Delta t
-\]
+**Velocity update:**
 
-The direct gravitational interaction algorithm has a computational complexity of:
+$$
+\vec{v}_i^{\,n+1}
+=
+\vec{v}_i^{\,n}
++
+\vec{a}_i^{\,n}\Delta t
+$$
 
-\[
-O(N^2)
-\]
+**Position update:**
 
-where \(N\) is the number of particles.
+$$
+\vec{r}_i^{\,n+1}
+=
+\vec{r}_i^{\,n}
++
+\vec{v}_i^{\,n+1}\Delta t
+$$
+
+Where:
+
+- \(\vec{v}_i^{\,n}\) is the velocity at timestep \(n\).
+- \(\vec{a}_i^{\,n}\) is the acceleration at timestep \(n\).
+- \(\vec{r}_i^{\,n}\) is the position at timestep \(n\).
+- \(\Delta t\) is the simulation timestep.
+
+### 3. Computational Complexity
+
+The direct N-Body algorithm calculates gravitational interactions between every pair of particles.
+
+The computational complexity per timestep is:
+
+$$
+T(N)=O(N^2)
+$$
+
+For \(K\) simulation timesteps:
+
+$$
+T(N,K)=O(KN^2)
+$$
 
 ## Parallelization with OpenMP
 
@@ -121,14 +155,14 @@ The number of threads can be configured through the `OMP_NUM_THREADS` environmen
 
 ## Installation and Setup
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/yash7756/nbody-hpc.git
 cd nbody-hpc
 ```
 
-### 2. Install the C++ compiler
+### 2. Install the C++ Compiler
 
 Install GCC with OpenMP support.
 
@@ -140,7 +174,7 @@ Verify the compiler:
 g++ --version
 ```
 
-### 3. Compile the sequential implementation
+### 3. Compile the Sequential Implementation
 
 ```bash
 g++ -O3 -std=c++17 src/nbody_serial.cpp -o nbody_serial.exe
@@ -152,7 +186,7 @@ Run:
 ./nbody_serial.exe
 ```
 
-### 4. Compile the OpenMP implementation
+### 4. Compile the OpenMP Implementation
 
 ```bash
 g++ -O3 -std=c++17 -fopenmp src/nbody_openmp.cpp -o nbody_openmp.exe
@@ -172,7 +206,7 @@ export OMP_NUM_THREADS=8
 ./nbody_openmp.exe
 ```
 
-### 5. Compile the live simulation
+### 5. Compile the Live Simulation
 
 ```bash
 g++ -O3 -std=c++17 -fopenmp -pthread src/nbody_live.cpp -o nbody_live.exe
@@ -186,13 +220,13 @@ Run with a configurable number of particles:
 
 The supported particle count is between 10 and 5000.
 
-### 6. Install Python dependencies
+### 6. Install Python Dependencies
 
 ```bash
 python -m pip install numpy vispy PyQt6 matplotlib
 ```
 
-### 7. Launch the interactive visualization
+### 7. Launch the Interactive Visualization
 
 ```bash
 python live_visualization.py
@@ -233,11 +267,31 @@ The following values are preliminary median runtimes from five runs:
 | OpenMP – 4 threads | 0.4864 s | 1.86x |
 | OpenMP – 8 threads | 0.3362 s | 2.70x |
 
-Speedup is calculated as:
+### Speedup Calculation
 
-\[
-S(p)=\frac{T_{\text{serial}}}{T_{\text{parallel}}}
-\]
+Parallel speedup measures how much faster the parallel implementation executes compared to the sequential implementation.
+
+$$
+S(p)=
+\frac{T_{\text{serial}}}
+{T_{\text{parallel}}(p)}
+$$
+
+Where:
+
+- \(S(p)\) is the speedup using \(p\) threads.
+- \(T_{\text{serial}}\) is the execution time of the sequential implementation.
+- \(T_{\text{parallel}}(p)\) is the execution time of the parallel implementation using \(p\) threads.
+- \(p\) is the number of OpenMP threads.
+
+For the eight-thread configuration:
+
+$$
+S(8)=\frac{0.906195}{0.336241}
+\approx 2.70
+$$
+
+This indicates approximately **2.70x speedup** compared with the sequential implementation.
 
 These are preliminary measurements, not definitive hardware performance results. Runtime variations can occur due to CPU scheduling, clock frequency, thermal conditions, and background processes.
 
@@ -247,11 +301,23 @@ The live visualization runtime is not directly comparable to these benchmarks be
 
 The simulation includes a momentum conservation check.
 
-The total momentum is calculated as:
+The total linear momentum of the particle system is calculated as:
 
-\[
-\vec{P}=\sum_{i=1}^{N}m_i\vec{v}_i
-\]
+$$
+\vec{P}=
+\sum_{i=1}^{N}m_i\vec{v}_i
+$$
+
+Momentum conservation is checked by comparing the initial and final total momentum:
+
+$$
+\Delta P=
+\left|
+\vec{P}_{\text{final}}
+-
+\vec{P}_{\text{initial}}
+\right|
+$$
 
 In the initial tests, the difference between initial and final total momentum was approximately:
 
@@ -273,6 +339,7 @@ Through this project, I explored:
 - Numerical integration and gravitational modelling.
 - C++ and Python interoperability using subprocess communication.
 - Real-time scientific visualization.
+
 
 ## Author
 
