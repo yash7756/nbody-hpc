@@ -1,0 +1,40 @@
+# 3D N-Body Simulation – Benchmark Results
+
+## Simulation Configuration
+- Particles: 500
+- Iterations: 500
+- Algorithm: Direct N-Body (O(N²))
+- Compiler: GCC 16.2.0
+- Optimization: -O3
+- Language: C++17
+- Parallelization: OpenMP
+- Hardware: AMD Ryzen 5 3500U (4 cores / 8 logical threads)
+
+## Median Execution Times
+
+| Configuration | Runtime (seconds) | Speedup |
+|---|---:|---:|
+| Sequential | 0.906195 | 1.00x |
+| OpenMP 1 thread | 0.964595 | 0.94x |
+| OpenMP 2 threads | 0.539376 | 1.68x |
+| OpenMP 4 threads | 0.486439 | 1.86x |
+| OpenMP 8 threads | 0.336241 | 2.70x |
+
+## Parallel Efficiency
+
+| Threads | Efficiency |
+|---|---:|
+| 1 | 93.95% |
+| 2 | 84.00% |
+| 4 | 46.57% |
+| 8 | 33.69% |
+
+## Correctness Validation
+- Initial momentum: (-0.000899685, -0.00113804, 0.00114471)
+- Final momentum: (-0.000899685, -0.00113804, 0.00114471)
+- Momentum difference: 5.54535e-18
+
+## Preliminary Conclusion
+The 8-thread OpenMP implementation achieved the best measured runtime of 0.336241 seconds, corresponding to approximately 2.70x speedup over the sequential implementation.
+
+Further controlled benchmarking is required to reduce the influence of CPU frequency, thermal conditions and background processes.
