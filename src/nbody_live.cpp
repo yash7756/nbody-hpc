@@ -7,7 +7,9 @@
 #include <fstream>
 #include <chrono>
 #include <iomanip>
-
+#include <atomic>
+#include <thread>
+#include <string>
 using namespace std;
 
 // Simulation parameters
@@ -17,6 +19,10 @@ const int ITERATIONS = 500;
 const double G = 1.0;
 const double DT = 0.01;
 const double SOFTENING = 0.1;
+
+atomic<bool> paused(true);
+atomic<bool> reset_requested(false);
+atomic<bool> stop_requested(false);
 
 struct Particle {
     double x, y, z;
@@ -156,80 +162,128 @@ void save_results(const vector<Particle>& particles) {
 
 
 // Main function
+
 int main() {
 
     vector<Particle> particles(N);
-    
+
+    initialize(particles);
+
+    Momentum initial_momentum =
+        calculate_momentum(particles);
 
     cerr << "OpenMP threads: "
          << omp_get_max_threads() << "\n";
-    initialize(particles);
 
-    // 1. Calculate initial momentum
-    Momentum initial_momentum = calculate_momentum(particles);
+    cerr << "Waiting for simulation commands...\n";
 
-    cout << "Starting 3D N-Body Simulation...\n";
+    // Listen for commands from Python
+    thread command_thread([]() {
+
+        string command;
+
+        while (cin >> command) {
+
+            if (command == "PAUSE") {
+                paused = true;
+                cerr << "Simulation paused\n";
+            }
+
+            else if (command == "RESUME") {
+                paused = false;
+                cerr << "Simulation resumed\n";
+            }
+
+            else if (command == "RESET") {
+                reset_requested = true;
+                cerr << "Reset requested\n";
+            }
+
+            else if (command == "STOP") {
+                stop_requested = true;
+                break;
+            }
+        }
+    });
+
+    command_thread.detach();
+
+    int step = 0;
 
     auto start = chrono::steady_clock::now();
 
-    // 2. Run simulation
-    for (int step = 0; step < ITERATIONS; step++) {
+    // Continuous simulation
+    while (!stop_requested) {
+
+        // Reset simulation
+        if (reset_requested.exchange(false)) {
+
+            initialize(particles);
+
+            initial_momentum =
+                calculate_momentum(particles);
+
+            step = 0;
+        }
+
+        // Pause simulation
+        if (paused) {
+
+            this_thread::sleep_for(
+                chrono::milliseconds(10)
+            );
+
+            continue;
+        }
 
         calculate_forces(particles);
         update_particles(particles);
 
-        // Send particle positions to Python
+        // Stream positions to Python
         if (step % 2 == 0) {
 
             for (int i = 0; i < N; i++) {
+
                 cout << particles[i].x << " "
-                    << particles[i].y << " "
-                    << particles[i].z << "\n";
+                     << particles[i].y << " "
+                     << particles[i].z << "\n";
             }
 
             cout << "END_FRAME\n";
             cout.flush();
+
+            // Limit frame production rate
+            this_thread::sleep_for(
+                chrono::milliseconds(16)
+            );
         }
+
+        step++;
     }
 
     auto stop = chrono::steady_clock::now();
 
-    // 3. Calculate final momentum
-    Momentum final_momentum = calculate_momentum(particles);
+    Momentum final_momentum =
+        calculate_momentum(particles);
 
     double runtime =
         chrono::duration<double>(stop - start).count();
-
-    // 4. Momentum validation output
-    cerr << "\nMomentum Validation:\n";
-
-    cerr << "Initial momentum: "
-         << initial_momentum.px << ", "
-         << initial_momentum.py << ", "
-         << initial_momentum.pz << "\n";
-
-    cerr << "Final momentum: "
-         << final_momentum.px << ", "
-         << final_momentum.py << ", "
-         << final_momentum.pz << "\n";
 
     double dx = final_momentum.px - initial_momentum.px;
     double dy = final_momentum.py - initial_momentum.py;
     double dz = final_momentum.pz - initial_momentum.pz;
 
-    double momentum_error = sqrt(dx*dx + dy*dy + dz*dz);
+    double momentum_error =
+        sqrt(dx*dx + dy*dy + dz*dz);
 
-    cerr << "Momentum difference: " << momentum_error << "\n";
+    cerr << "\nSimulation stopped\n";
+    cerr << "Momentum difference: "
+         << momentum_error << "\n";
 
-    // 5. Save results
+    cerr << "Execution time: "
+         << runtime << " seconds\n";
+
     save_results(particles);
-
-    cerr << "\nSimulation Completed!\n";
-    cerr << "Particles: " << N << "\n";
-    cerr << "Iterations: " << ITERATIONS << "\n";
-
-    cerr << fixed << setprecision(6);
-    cerr << "Execution Time: " << runtime << " seconds\n";
 
     return 0;
 }
