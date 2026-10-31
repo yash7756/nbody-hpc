@@ -1,27 +1,33 @@
 # 3D High-Performance N-Body Gravitational Simulation
 
-A real-time 3D gravitational N-Body simulation developed in **C++17 using OpenMP** for parallel computing, with a **Python-based interactive visualization dashboard** built using PyQt6 and VisPy.
+A real-time 3D gravitational N-Body simulation developed using **C++17 and OpenMP** for parallel computing, with a **Python-based interactive visualization dashboard** built using PyQt6 and VisPy.
 
-This project explores parallel computing, shared-memory parallelism, CPU performance optimization, and real-time scientific visualization.
+This project explores parallel computing, shared-memory parallelism, CPU performance optimization, numerical simulation, and real-time scientific visualization.
 
 ## Project Overview
 
 The N-Body problem simulates the gravitational interactions between multiple particles. Every particle exerts a gravitational force on every other particle, making the direct computation computationally expensive as the number of particles increases.
 
-This project implements a direct N-Body simulation and explores how OpenMP can accelerate its computation through multithreading.
+This project implements a direct N-Body simulation using two approaches:
 
-### Key Features
+- Sequential implementation using C++.
+- Parallel implementation using OpenMP.
+
+The project also includes a real-time 3D visualization dashboard that communicates with the C++ simulation to display particle movement interactively.
+
+## Key Features
 
 - 3D gravitational simulation of interacting particles.
 - Sequential and OpenMP-parallel implementations.
 - Shared-memory parallelism using OpenMP.
-- Configurable number of particles (10–5000).
+- Configurable particle count (10–5000).
 - Adjustable OpenMP thread count.
 - Real-time 3D particle visualization.
 - Interactive dashboard built with PyQt6 and VisPy.
 - Start, Pause, Reset, and Stop controls.
 - Performance benchmarking and speedup analysis.
 - Momentum conservation validation.
+- C++ and Python integration through subprocess communication.
 
 ## Technologies Used
 
@@ -67,7 +73,7 @@ nbody-hpc/
 
 ### 1. Gravitational Acceleration
 
-The gravitational acceleration acting on particle \(i\) due to all other particles is calculated using Newton's law of universal gravitation with gravitational softening:
+The gravitational acceleration acting on particle \(i\), due to all other particles, is calculated using Newton's law of universal gravitation with gravitational softening:
 
 $$
 \vec{a}_i =
@@ -83,8 +89,9 @@ Where:
 
 - \(G\) is the gravitational constant.
 - \(m_j\) is the mass of particle \(j\).
-- \(\vec{r}_i\) and \(\vec{r}_j\) are the position vectors of particles \(i\) and \(j\).
-- \(\epsilon\) is the gravitational softening parameter, used to avoid singularities at very small distances.
+- \(\vec{r}_i\) is the position vector of particle \(i\).
+- \(\vec{r}_j\) is the position vector of particle \(j\).
+- \(\epsilon\) is the gravitational softening parameter, used to avoid singularities when particles approach each other.
 - \(N\) is the total number of particles.
 
 ### 2. Symplectic Euler Integration
@@ -134,9 +141,13 @@ $$
 T(N,K)=O(KN^2)
 $$
 
+This quadratic complexity makes the N-Body problem computationally expensive for large particle counts.
+
 ## Parallelization with OpenMP
 
-The computationally intensive force calculation is parallelized using OpenMP.
+The computationally intensive gravitational force calculation is parallelized using OpenMP.
+
+The outer loop distributes particle calculations across multiple CPU threads:
 
 ```cpp
 #pragma omp parallel for schedule(static)
@@ -147,9 +158,9 @@ for (int i = 0; i < N; i++) {
 
 Each thread calculates the acceleration of different particles.
 
-Since each iteration writes to a different particle's acceleration, the outer loop can be parallelized without requiring synchronization for the acceleration calculations.
+Since each iteration writes to a different particle's acceleration, the outer loop can be parallelized without requiring synchronization between iterations for these acceleration updates.
 
-Particle updates are also parallelized using OpenMP.
+Particle position and velocity updates are also parallelized using OpenMP.
 
 The number of threads can be configured through the `OMP_NUM_THREADS` environment variable.
 
@@ -168,7 +179,7 @@ Install GCC with OpenMP support.
 
 For Windows, MSYS2 UCRT64 can be used.
 
-Verify the compiler:
+Verify the compiler installation:
 
 ```bash
 g++ --version
@@ -236,7 +247,7 @@ The Python dashboard launches the C++ simulation as a separate process and recei
 
 ## Interactive Dashboard
 
-The dashboard provides the following controls:
+The interactive dashboard provides the following controls:
 
 | Control | Function |
 |---|---|
@@ -247,17 +258,26 @@ The dashboard provides the following controls:
 | Particle Selector | Select the number of particles |
 | Apply Particle Count | Restart the simulation with the selected particle count |
 
+### Configuring OpenMP Threads
+
 The OpenMP thread count can be changed in `live_visualization.py`:
 
 ```python
 env["OMP_NUM_THREADS"] = "8"
 ```
 
+This allows experimentation with different thread configurations without modifying the C++ implementation.
+
 ## Preliminary Performance Results
 
-Initial benchmarking was conducted with 500 particles and 500 simulation iterations.
+Initial benchmarking was conducted using:
 
-The following values are preliminary median runtimes from five runs:
+- Number of particles: 500
+- Simulation iterations: 500
+- Optimization level: `-O3`
+- Benchmark repetitions: 5 runs
+
+The following values represent the median execution time from five runs:
 
 | Configuration | Median Runtime | Speedup |
 |---|---:|---:|
@@ -272,7 +292,7 @@ The following values are preliminary median runtimes from five runs:
 Parallel speedup measures how much faster the parallel implementation executes compared to the sequential implementation.
 
 $$
-S(p) =
+S(p)=
 \frac{T_{\text{serial}}}
 {T_{\text{parallel}}(p)}
 $$
@@ -287,12 +307,27 @@ Where:
 For the eight-thread configuration:
 
 $$
-S(8) =
+S(8)=
 \frac{0.906195}{0.336241}
 \approx 2.70
 $$
 
 This indicates approximately **2.70x speedup** compared with the sequential implementation.
+
+### Parallel Efficiency
+
+Parallel efficiency measures how effectively the available threads are utilized.
+
+$$
+E(p)=\frac{S(p)}{p}\times 100\%
+$$
+
+For eight threads:
+
+$$
+E(8)=\frac{2.70}{8}\times 100
+\approx 33.75\%
+$$
 
 These are preliminary measurements, not definitive hardware performance results. Runtime variations can occur due to CPU scheduling, clock frequency, thermal conditions, and background processes.
 
@@ -302,6 +337,8 @@ The live visualization runtime is not directly comparable to these benchmarks be
 
 The simulation includes a momentum conservation check.
 
+### Total Linear Momentum
+
 The total linear momentum of the particle system is calculated as:
 
 $$
@@ -309,15 +346,23 @@ $$
 \sum_{i=1}^{N}m_i\vec{v}_i
 $$
 
+Where:
+
+- \(m_i\) is the mass of particle \(i\).
+- \(\vec{v}_i\) is the velocity vector of particle \(i\).
+- \(N\) is the total number of particles.
+
+### Momentum Conservation Check
+
 Momentum conservation is checked by comparing the initial and final total momentum:
 
 $$
 \Delta P=
-\left|
+\left\|
 \vec{P}_{\text{final}}
 -
 \vec{P}_{\text{initial}}
-\right|
+\right\|
 $$
 
 In the initial tests, the difference between initial and final total momentum was approximately:
@@ -340,7 +385,6 @@ Through this project, I explored:
 - Numerical integration and gravitational modelling.
 - C++ and Python interoperability using subprocess communication.
 - Real-time scientific visualization.
-
 
 ## Author
 
