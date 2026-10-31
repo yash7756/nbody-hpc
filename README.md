@@ -272,7 +272,7 @@ The following values are preliminary median runtimes from five runs:
 Parallel speedup measures how much faster the parallel implementation executes compared to the sequential implementation.
 
 $$
-S(p)=
+S(p) =
 \frac{T_{\text{serial}}}
 {T_{\text{parallel}}(p)}
 $$
@@ -287,7 +287,8 @@ Where:
 For the eight-thread configuration:
 
 $$
-S(8)=\frac{0.906195}{0.336241}
+S(8) =
+\frac{0.906195}{0.336241}
 \approx 2.70
 $$
 
